@@ -3,6 +3,8 @@ from torchvision import datasets, transforms
 
 import os
 
+from data.tiny_imagenet import TinyImageNet
+
 norm = dict(
     MNIST=transforms.Normalize(
         mean=(0.1307,),
@@ -20,12 +22,13 @@ norm = dict(
         mean=(0.485, 0.456, 0.406),
         std=(0.229, 0.224, 0.225)
     ),
-    # [0.480, 0.448, 0.398], [0.230, 0.227, 0.226]
     TINY_IMAGENET=transforms.Normalize(
         mean=(0.480, 0.448, 0.398),
-        std=(0.277, 0.269, 0.282)
+        std=(0.230, 0.227, 0.226)
+        # [0.277, 0.269, 0.282]
     )
 )
+
 
 def load_data(args):
     print('Load Dataset :: {}'.format(args.dataset))
@@ -33,6 +36,7 @@ def load_data(args):
         transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),
             transforms.ToTensor(),
             norm[args.dataset]
         ])
@@ -60,6 +64,7 @@ def load_data(args):
         transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),
             transforms.ToTensor(),
             norm[args.dataset]
         ])
@@ -101,17 +106,19 @@ def load_data(args):
             num_workers=args.num_workers
         )
     elif args.dataset == 'TINY_IMAGENET':
-        traindir = os.path.join(args.data, 'tiny_imagenet', 'train')
-        valdir = os.path.join(args.data, 'tiny_imagenet', 'val')
-        train_dataset = datasets.ImageFolder(
-            traindir,
-            transforms.Compose([
-                transforms.RandomCrop(64, padding=8),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                norm[args.dataset]
-            ]))
-
+        transform_train = transforms.Compose([
+            transforms.RandomCrop(64, padding=8),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),
+            transforms.ToTensor(),
+            norm[args.dataset]
+        ])
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            norm[args.dataset]
+        ])
+        train_dataset = TinyImageNet(root=args.data, mode="train", transform=transform_train)
+        test_dataset = TinyImageNet(root=args.data, mode="val", transform=transform_test)
         # Check class labels
         # print(train_dataset.classes)
         if args.distributed:
@@ -129,10 +136,7 @@ def load_data(args):
         )
 
         test_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, transforms.Compose([
-                transforms.ToTensor(),
-                norm[args.dataset]
-            ])),
+            test_dataset,
             batch_size=args.batch_size,
             shuffle=False,
             num_workers=args.num_workers,

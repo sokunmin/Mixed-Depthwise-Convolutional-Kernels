@@ -44,7 +44,7 @@ def get_args():
     parser.add_argument('--cuda', type=bool, default=True)
     parser.add_argument('--pretrained-model', type=bool, default=False)
 
-    parser.add_argument('--distributed', action='store_true', default=False)
+    parser.add_argument('--distributed', action='store_true', default=False)  # TOCHECK: still has a bug
     parser.add_argument('--gpu-devices', type=int, nargs='+', default=None)
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--local_rank', type=int, default=0, help='current process number')
