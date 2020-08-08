@@ -3,6 +3,29 @@ from torchvision import datasets, transforms
 
 import os
 
+norm = dict(
+    MNIST=transforms.Normalize(
+        mean=(0.1307,),
+        std=(0.3081,)
+    ),
+    CIFAR10=transforms.Normalize(
+        mean=(0.4914, 0.4822, 0.4465),
+        std=(0.2470, 0.2435, 0.2616)
+    ),
+    CIFAR100=transforms.Normalize(
+        mean=(0.5071, 0.4865, 0.4409),
+        std=(0.2673, 0.2564, 0.2762)
+    ),
+    IMAGENET=transforms.Normalize(
+        mean=(0.485, 0.456, 0.406),
+        std=(0.229, 0.224, 0.225)
+    ),
+    # [0.480, 0.448, 0.398], [0.230, 0.227, 0.226]
+    TINY_IMAGENET=transforms.Normalize(
+        mean=(0.480, 0.448, 0.398),
+        std=(0.277, 0.269, 0.282)
+    )
+)
 
 def load_data(args):
     print('Load Dataset :: {}'.format(args.dataset))
@@ -11,18 +34,12 @@ def load_data(args):
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.4914, 0.4822, 0.4465),
-                std=(0.2470, 0.2435, 0.2616)
-            )
+            norm[args.dataset]
         ])
 
         transform_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.4914, 0.4822, 0.4465),
-                std=(0.2470, 0.2435, 0.2616)
-            )
+            norm[args.dataset]
         ])
 
         train_loader = torch.utils.data.DataLoader(
@@ -44,17 +61,11 @@ def load_data(args):
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.5071, 0.4865, 0.4409),
-                std=(0.2673, 0.2564, 0.2762)
-            ),
+            norm[args.dataset]
         ])
         transform_test = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.5071, 0.4865, 0.4409),
-                std=(0.2673, 0.2564, 0.2762)
-            ),
+            norm[args.dataset]
         ])
 
         train_loader = torch.utils.data.DataLoader(
@@ -74,10 +85,7 @@ def load_data(args):
     elif args.dataset == 'MNIST':
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.1307,),
-                std=(0.3081,)
-            )
+            norm[args.dataset]
         ])
         train_loader = torch.utils.data.DataLoader(
             datasets.MNIST('data', train=True, download=True, transform=transform),
@@ -92,21 +100,54 @@ def load_data(args):
             shuffle=False,
             num_workers=args.num_workers
         )
+    elif args.dataset == 'TINY_IMAGENET':
+        traindir = os.path.join(args.data, 'tiny_imagenet', 'train')
+        valdir = os.path.join(args.data, 'tiny_imagenet', 'val')
+        train_dataset = datasets.ImageFolder(
+            traindir,
+            transforms.Compose([
+                transforms.RandomCrop(64, padding=8),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                norm[args.dataset]
+            ]))
 
+        # Check class labels
+        # print(train_dataset.classes)
+        if args.distributed:
+            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        else:
+            train_sampler = None
+
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=args.num_workers,
+            pin_memory=True,
+            sampler=train_sampler
+        )
+
+        test_loader = torch.utils.data.DataLoader(
+            datasets.ImageFolder(valdir, transforms.Compose([
+                transforms.ToTensor(),
+                norm[args.dataset]
+            ])),
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=True
+        )
     elif args.dataset == 'IMAGENET':
         traindir = os.path.join(args.data, 'train')
         valdir = os.path.join(args.data, 'val')
-
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-
         train_dataset = datasets.ImageFolder(
             traindir,
             transforms.Compose([
                 transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                normalize,
+                norm[args.dataset]
             ]))
 
         # Check class labels
@@ -121,7 +162,7 @@ def load_data(args):
             train_dataset,
             batch_size=args.batch_size,
             shuffle=(train_sampler is None),
-            num_workers=args.workers,
+            num_workers=args.num_workers,
             pin_memory=True,
             sampler=train_sampler
         )
@@ -131,12 +172,14 @@ def load_data(args):
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
-                normalize,
+                norm[args.dataset]
             ])),
             batch_size=args.batch_size,
             shuffle=False,
-            num_workers=args.workers,
+            num_workers=args.num_workers,
             pin_memory=True
         )
+    else:
+        raise NotImplementedError
 
     return train_loader, test_loader

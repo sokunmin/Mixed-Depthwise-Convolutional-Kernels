@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 import math
 
-from mdconv import MDConv, GroupConv2D
+from model.mdconv import MDConv, GroupConv2D
 
 
 def round_filters(filters, multiplier=1.0, divisor=8, min_depth=None):
@@ -124,7 +124,7 @@ class MixNet(nn.Module):
         super(MixNet, self).__init__()
         self.dataset = dataset
 
-        if dataset == 'IMAGENET':
+        if 'IMAGENET' == dataset:
             self.conv = nn.Sequential(
                 nn.Conv2d(in_channels=3, out_channels=stem, kernel_size=3, stride=2, padding=1),
                 nn.BatchNorm2d(stem),
@@ -136,6 +136,8 @@ class MixNet(nn.Module):
                 nn.BatchNorm2d(stem),
                 nn.ReLU(),
             )
+        else:
+            raise NotImplementedError
 
         layers = []
         for in_channels, out_channels, n_chunks, stride, expqand_ratio, se_ratio, swish, expand_ksize, project_ksize in block_args:
@@ -161,10 +163,12 @@ class MixNet(nn.Module):
         out = self.layers(out)
         out = self.head_conv(out)
 
-        if self.dataset == 'IMAGENET':
+        if 'IMAGENET' == self.dataset:
             out = F.avg_pool2d(out, 7)
         elif self.dataset == 'CIFAR10' or self.dataset == 'CIFAR100':
             out = F.avg_pool2d(out, 4)
+        else:
+            raise NotImplementedError
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
@@ -193,7 +197,7 @@ def get_model_parameters(model):
 
 
 def mixnet_s(num_classes=1000, multiplier=1.0, divisor=8, min_depth=None, dataset='IMAGENET'):
-    if dataset == 'IMAGENET':
+    if 'IMAGENET' == dataset:
         small = [
             [16, 16, 1, 1, 1, None, False, 1, 1],
             [16, 24, 1, 2, 6, None, False, 2, 2],
@@ -237,7 +241,8 @@ def mixnet_s(num_classes=1000, multiplier=1.0, divisor=8, min_depth=None, datase
 
             [200, 200, 4, 1, 6, 0.5, True, 1, 2]
         ]
-
+    else:
+        raise NotImplementedError
     stem = round_filters(16, multiplier)
     last_out_channels = round_filters(200, multiplier)
     head = round_filters(1536, multiplier)
@@ -246,7 +251,7 @@ def mixnet_s(num_classes=1000, multiplier=1.0, divisor=8, min_depth=None, datase
 
 
 def mixnet_m(num_classes=1000, multiplier=1.0, divisor=8, min_depth=None, dataset='IMAGENET'):
-    if dataset == 'IMAGENET':
+    if 'IMAGENET' == dataset:
         medium = [
             [24, 24, 1, 1, 1, None, False, 1, 1],
             [24, 32, 3, 2, 6, None, False, 2, 2],
@@ -296,6 +301,8 @@ def mixnet_m(num_classes=1000, multiplier=1.0, divisor=8, min_depth=None, datase
             [200, 200, 4, 1, 6, 0.5, True, 1, 2],
             [200, 200, 4, 1, 6, 0.5, True, 1, 2]
         ]
+    else:
+        raise NotImplementedError
     for line in medium:
         line[0] = round_filters(line[0], multiplier)
         line[1] = round_filters(line[1], multiplier)

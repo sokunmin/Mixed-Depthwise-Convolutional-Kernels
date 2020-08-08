@@ -1,16 +1,21 @@
+import random
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 
 import os
-from tqdm import tqdm
 import shutil
 import time
+import torchvision.models as models
 
 from config import get_args
-from preprocess import load_data
-from model import mixnet_s, mixnet_m, mixnet_l
+from data.dataset import load_data
+from loss.focal_loss import FocalLoss
+from model.ghostnet import ghostnet
+from model.mobilenetv3 import mobilenetv3_small, mobilenetv3_large
+from model.model import mixnet_s, mixnet_m, mixnet_l
+from tensorboardX import SummaryWriter
 
 
 def adjust_learning_rate(optimizer, epoch, args):
@@ -81,7 +86,7 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def train(model, train_loader, optimizer, criterion, epoch, args, logger):
+def train(model, train_loader, optimizer, criterion, epoch, args, logger, writer):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -110,6 +115,10 @@ def train(model, train_loader, optimizer, criterion, epoch, args, logger):
         losses.update(loss.item(), data.size(0))
         top1.update(acc1[0], data.size(0))
         top5.update(acc5[0], data.size(0))
+        n_iter = (epoch - 1) * len(train_loader) + i + 1
+        writer.add_scalar('Train/Loss', loss.item(), n_iter)
+        writer.add_scalar('Train/Acc1', acc1[0], n_iter)
+        writer.add_scalar('Train/Acc5', acc5[0], n_iter)
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -176,21 +185,36 @@ def get_model_parameters(model):
 
 
 def main(args, logger):
+    writer = SummaryWriter(log_dir=os.path.join('logs', args.dataset, args.model_name, args.loss))
+
     train_loader, test_loader = load_data(args)
     if args.dataset == 'CIFAR10':
         num_classes = 10
     elif args.dataset == 'CIFAR100':
         num_classes = 100
+    elif args.dataset == 'TINY_IMAGENET':
+        num_classes = 200
     elif args.dataset == 'IMAGENET':
         num_classes = 1000
 
     print('Model name :: {}, Dataset :: {}, Num classes :: {}'.format(args.model_name, args.dataset, num_classes))
-    if args.model_name == 's':
+    if args.model_name == 'mixnet_s':
         model = mixnet_s(num_classes=num_classes, dataset=args.dataset)
-    elif args.model_name == 'm':
+        # model = mixnet_s(num_classes=num_classes)
+    elif args.model_name == 'mixnet_m':
         model = mixnet_m(num_classes=num_classes, dataset=args.dataset)
-    elif args.model_name == 'l':
+    elif args.model_name == 'mixnet_l':
         model = mixnet_l(num_classes=num_classes, dataset=args.dataset)
+    elif args.model_name == 'ghostnet':
+        model = ghostnet(num_classes=num_classes)
+    elif args.model_name == 'mobilenetv2':
+        model = models.mobilenet_v2(num_classes=num_classes)
+    elif args.model_name == 'mobilenetv3_s':
+        model = mobilenetv3_small(num_classes=num_classes)
+    elif args.model_name == 'mobilenetv3_l':
+        model = mobilenetv3_large(num_classes=num_classes)
+    else:
+        raise NotImplementedError
 
     if args.pretrained_model:
         filename = 'best_model_' + str(args.dataset) + '_' + str(args.model_name) + '_ckpt.tar'
@@ -218,13 +242,19 @@ def main(args, logger):
     print("Number of model parameters: ", get_model_parameters(model))
     logger.info("Number of model parameters: {0}".format(get_model_parameters(model)))
 
-    criterion = nn.CrossEntropyLoss()
+    if args.loss == 'ce':
+        criterion = nn.CrossEntropyLoss()
+    elif args.loss == 'focal':
+        criterion = FocalLoss()
+    else:
+        raise NotImplementedError
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=0.001)
+    # lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=0.001)
+    lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 100], gamma=0.2) #learning rate decay
 
     for epoch in range(start_epoch, args.epochs + 1):
         # adjust_learning_rate(optimizer, epoch, args)
-        train(model, train_loader, optimizer, criterion, epoch, args, logger)
+        train(model, train_loader, optimizer, criterion, epoch, args, logger, writer)
         acc1, acc5 = eval(model, test_loader, criterion, args)
         lr_scheduler.step()
 
@@ -261,8 +291,11 @@ def main(args, logger):
                 'optimizer': optimizer.state_dict(),
                 'parameters': parameters,
             }, is_best, filename)
+        writer.add_scalar('Test/Acc1', acc1, epoch)
+        writer.add_scalar('Test/Acc5', acc5, epoch)
 
         print(" Test best acc1:", best_acc1, " acc1: ", acc1, " acc5: ", acc5)
+    writer.close()
 
 
 def save_checkpoint(state, is_best, filename):
@@ -274,6 +307,26 @@ def save_checkpoint(state, is_best, filename):
         shutil.copyfile(file_path, best_file_path)
 
 
+def set_random_seed(seed, deterministic=False):
+    """Set random seed.
+
+    Args:
+        seed (int): Seed to be used.
+        deterministic (bool): Whether to set the deterministic option for
+            CUDNN backend, i.e., set `torch.backends.cudnn.deterministic`
+            to True and `torch.backends.cudnn.benchmark` to False.
+            Default: False.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    if deterministic:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 if __name__ == '__main__':
     args, logger = get_args()
+    set_random_seed(0, True)
     main(args, logger)
