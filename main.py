@@ -13,6 +13,9 @@ from config import get_args
 from data.dataset import load_data
 from loss.focal_loss import FocalLoss
 from model.ghostnet import ghostnet
+from model.ghostnet_hmish import ghosthmishnet
+from model.ghostnet_mish import ghostmishnet
+from model.ghostnet_sharkfin import ghostsharkfinnet
 from model.mobilenetv3 import mobilenetv3_small, mobilenetv3_large
 from model.model import mixnet_s, mixnet_m, mixnet_l
 from tensorboardX import SummaryWriter
@@ -207,6 +210,12 @@ def main(args, logger):
         model = mixnet_l(num_classes=num_classes, dataset=args.dataset)
     elif args.model_name == 'ghostnet':
         model = ghostnet(num_classes=num_classes)
+    elif args.model_name == 'ghostmishnet':
+        model = ghostmishnet(num_classes=num_classes)
+    elif args.model_name == 'ghosthmishnet':
+        model = ghosthmishnet(num_classes=num_classes)
+    elif args.model_name == 'ghostsharkfinnet':
+        model = ghostsharkfinnet(num_classes=num_classes)
     elif args.model_name == 'mobilenetv2':
         model = models.mobilenet_v2(num_classes=num_classes)
     elif args.model_name == 'mobilenetv3_s':
@@ -250,7 +259,7 @@ def main(args, logger):
         raise NotImplementedError
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     # lr_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=0.001)
-    lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 100], gamma=0.2) #learning rate decay
+    lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1) #learning rate decay
 
     for epoch in range(start_epoch, args.epochs + 1):
         # adjust_learning_rate(optimizer, epoch, args)

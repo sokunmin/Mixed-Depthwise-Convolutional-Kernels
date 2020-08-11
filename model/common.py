@@ -84,6 +84,33 @@ class HSwish(nn.Module):
         return x * F.relu6(x + 3.0, inplace=self.inplace) / 6.0
 
 
+class Mish(nn.Module):
+    def __init__(self, inplace=False):
+        super(Mish, self).__init__()
+        self.inplace = inplace
+
+    def forward(self, x):
+        return x * torch.tanh(F.softplus(x))
+
+
+class HMish(nn.Module):
+    def __init__(self, inplace=False):
+        super(HMish, self).__init__()
+        self.inplace = inplace
+
+    def forward(self, x):
+        return torch.min(2., F.relu(x + 2., inplace=True)) * 0.5 * x
+
+
+class SharkFin(nn.Module):
+    def __init__(self, inplace=False):
+        super(SharkFin, self).__init__()
+        self.inplace = inplace
+
+    def forward(self, x):
+        return x.exp().tanh() * x.clamp(min=-1)
+
+
 def get_activation_layer(activation):
     """
     Create activation layer from string/function.
@@ -110,6 +137,12 @@ def get_activation_layer(activation):
             return Swish()
         elif activation == "hswish":
             return HSwish(inplace=True)
+        elif activation == "mish":
+            return Mish()
+        elif activation == "hmish":
+            return HMish()
+        elif activation == "sharkfin":
+            return SharkFin()
         elif activation == "sigmoid":
             return nn.Sigmoid()
         elif activation == "hsigmoid":

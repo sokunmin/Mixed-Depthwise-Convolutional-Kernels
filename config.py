@@ -33,7 +33,7 @@ def get_args():
 
     parser.add_argument('--dataset', type=str, default='CIFAR100', help='CIFAR10, CIFAR100, MNIST, TINY_IMAGENET, IMAGENET')
     parser.add_argument('--model-name', type=str, default='mixnet_s', help='mixnet_{s, m, l}')
-    parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--batch-size', type=int, default=128)
     parser.add_argument('--num-workers', type=int, default=0)
     parser.add_argument('--epochs', type=int, default=150)  # 310
     parser.add_argument('--loss', type=str, default='ce', help='ce, focal')
